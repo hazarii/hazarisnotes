@@ -112,7 +112,7 @@
         const noteSnapshots = snapshot.docs.sort((first, second) => {
           const firstTime = first.data().createdAt?.toMillis() || 0;
           const secondTime = second.data().createdAt?.toMillis() || 0;
-          return firstTime - secondTime;
+          return secondTime - firstTime;
         });
 
         notesContainer.innerHTML = "";
@@ -135,7 +135,7 @@
             <div class="flex flex-col gap-2">
               <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
                 <h2 class="text-xl font-bold text-slate-100">${escapeHTML(note.title || "Untitled note")}</h2>
-                <time class="text-xs text-slate-500 sm:text-right">${escapeHTML(formatTimestamp(note.createdAt))}</time>
+                <time class="text-xs text-slate-500 sm:text-right">${escapeHTML(formatTimestamp(note.createdAt))} | ${escapeHTML(note.ownerName || note.ownerEmail || "Unknown author")}</time>
               </div>
               <p class="text-slate-300 whitespace-pre-wrap leading-relaxed text-sm">${escapeHTML(note.content || "")}</p>
               ${note.ownerId === currentUser.uid ? `
