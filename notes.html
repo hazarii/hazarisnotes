@@ -67,6 +67,7 @@
     const userLabel = document.getElementById("user-label");
     const googleProvider = new GoogleAuthProvider();
     let notesStarted = false;
+    let unsubscribeNotes;
 
     function showError(message) {
       statusMessage.textContent = message;
@@ -108,7 +109,7 @@
       userLabel.classList.remove("hidden");
       const notesQuery = query(notesCollection);
 
-      onSnapshot(notesQuery, (snapshot) => {
+      unsubscribeNotes = onSnapshot(notesQuery, (snapshot) => {
         const noteSnapshots = snapshot.docs.sort((first, second) => {
           const firstTime = first.data().createdAt?.toMillis() || 0;
           const secondTime = second.data().createdAt?.toMillis() || 0;
@@ -154,7 +155,23 @@
     }
 
     onAuthStateChanged(auth, (user) => {
-      if (user && !user.isAnonymous) startNotes(user);
+      if (user && !user.isAnonymous) {
+        startNotes(user);
+        return;
+      }
+
+      if (unsubscribeNotes) {
+        unsubscribeNotes();
+        unsubscribeNotes = null;
+      }
+      notesStarted = false;
+      signInButton.classList.remove("hidden");
+      signOutButton.classList.add("hidden");
+      userLabel.classList.add("hidden");
+      notesContainer.innerHTML = "";
+      noteCount.textContent = "";
+      statusMessage.textContent = "Sign in with Google to view shared notes.";
+      statusMessage.className = "text-center text-slate-400 py-8";
     });
   </script>
 </body>

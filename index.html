@@ -111,6 +111,8 @@
     const googleProvider = new GoogleAuthProvider();
     let currentUser;
     let notesStarted = false;
+    let formListenerStarted = false;
+    let unsubscribeNotes;
 
     function showError(message) {
       errorMessage.textContent = message;
@@ -139,7 +141,9 @@
       submitButton.disabled = false;
 
     // 3. Create Note
-    noteForm.addEventListener("submit", async (e) => {
+    if (!formListenerStarted) {
+      formListenerStarted = true;
+      noteForm.addEventListener("submit", async (e) => {
       e.preventDefault();
       const title = titleInput.value.trim();
       const content = contentInput.value.trim();
@@ -167,12 +171,13 @@
         console.error("Error adding note: ", err);
         showError(`Could not add note: ${err.code === "permission-denied" ? "Firestore permissions do not allow writes." : err.message}`);
       }
-    });
+      });
+    }
 
     // 4. Real-time Listener (Read Notes)
       const q = query(notesCollection);
 
-      onSnapshot(q, (snapshot) => {
+      unsubscribeNotes = onSnapshot(q, (snapshot) => {
       notesContainer.innerHTML = ""; // Clear existing notes render
 
       if (snapshot.empty) {
@@ -240,7 +245,23 @@
 
     submitButton.disabled = true;
     onAuthStateChanged(auth, (user) => {
-      if (user && !user.isAnonymous) startNotes(user);
+      if (user && !user.isAnonymous) {
+        startNotes(user);
+        return;
+      }
+
+      if (unsubscribeNotes) {
+        unsubscribeNotes();
+        unsubscribeNotes = null;
+      }
+      notesStarted = false;
+      currentUser = null;
+      submitButton.disabled = true;
+      signInButton.classList.remove("hidden");
+      signOutButton.classList.add("hidden");
+      userLabel.classList.add("hidden");
+      notesContainer.innerHTML = "";
+      errorMessage.classList.add("hidden");
     });
 
     // Helper function to prevent XSS attacks
