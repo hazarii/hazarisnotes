@@ -43,6 +43,7 @@
       >
         Add Note
       </button>
+      <p id="error-message" class="hidden text-sm text-rose-400"></p>
     </form>
 
     <!-- Notes List Grid -->
@@ -88,6 +89,12 @@
     const titleInput = document.getElementById("title");
     const contentInput = document.getElementById("content");
     const notesContainer = document.getElementById("notes-container");
+    const errorMessage = document.getElementById("error-message");
+
+    function showError(message) {
+      errorMessage.textContent = message;
+      errorMessage.classList.remove("hidden");
+    }
 
     // 3. Create Note
     noteForm.addEventListener("submit", async (e) => {
@@ -98,6 +105,7 @@
       if (!title || !content) return;
 
       try {
+        errorMessage.classList.add("hidden");
         await addDoc(notesCollection, {
           title: title,
           content: content,
@@ -109,6 +117,7 @@
         contentInput.value = "";
       } catch (err) {
         console.error("Error adding note: ", err);
+        showError(`Could not add note: ${err.code === "permission-denied" ? "Firestore permissions do not allow writes." : err.message}`);
       }
     });
 
@@ -158,6 +167,9 @@
           await deleteDoc(doc(db, "notes", noteId));
         });
       });
+    }, (err) => {
+      console.error("Error loading notes: ", err);
+      showError(`Could not load notes: ${err.code === "permission-denied" ? "Firestore permissions do not allow reads." : err.message}`);
     });
 
     // Helper function to prevent XSS attacks
