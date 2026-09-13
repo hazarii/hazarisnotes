@@ -43,6 +43,12 @@
       >
         Add Note
       </button>
+      <a
+        href="notes.html"
+        class="block text-center text-sm text-indigo-400 hover:text-indigo-300 transition-colors"
+      >
+        View all notes
+      </a>
       <p id="error-message" class="hidden text-sm text-rose-400"></p>
     </form>
 
@@ -65,7 +71,6 @@
       deleteDoc, 
       doc, 
       query, 
-      where,
       serverTimestamp 
     } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-firestore.js";
 
@@ -141,7 +146,7 @@
 
     // 4. Real-time Listener (Read Notes)
     if (currentUser) {
-      const q = query(notesCollection, where("ownerId", "==", currentUser.uid));
+        const q = query(notesCollection);
 
       onSnapshot(q, (snapshot) => {
       notesContainer.innerHTML = ""; // Clear existing notes render
@@ -172,14 +177,16 @@
             <h3 class="text-xl font-bold text-slate-100">${escapeHTML(data.title)}</h3>
             <p class="text-slate-300 mt-2 whitespace-pre-wrap leading-relaxed text-sm">${escapeHTML(data.content)}</p>
           </div>
-          <div class="flex justify-end pt-2 border-t border-slate-700/50">
-            <button 
-              data-id="${id}" 
-              class="delete-btn text-xs font-medium text-rose-400 hover:text-rose-300 transition-colors bg-rose-950/40 hover:bg-rose-900/40 px-3 py-1.5 rounded-md border border-rose-800/40"
-            >
-              Delete
-            </button>
-          </div>
+          ${data.ownerId === currentUser.uid ? `
+            <div class="flex justify-end pt-2 border-t border-slate-700/50">
+              <button 
+                data-id="${id}" 
+                class="delete-btn text-xs font-medium text-rose-400 hover:text-rose-300 transition-colors bg-rose-950/40 hover:bg-rose-900/40 px-3 py-1.5 rounded-md border border-rose-800/40"
+              >
+                Delete
+              </button>
+            </div>
+          ` : ""}
         `;
 
         notesContainer.appendChild(noteCard);

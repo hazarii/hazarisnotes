@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>All Notes | hazarisNotes</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen p-6 font-sans">
+  <main class="max-w-3xl mx-auto space-y-8">
+    <header class="text-center">
+      <p class="text-indigo-400 font-semibold mb-2">hazarisNotes</p>
+      <h1 class="text-4xl font-extrabold tracking-tight text-indigo-400">All Notes</h1>
+      <p class="text-slate-400 mt-1">Your notes from oldest to newest</p>
+    </header>
+
+    <div class="flex justify-between items-center gap-4">
+      <p id="note-count" class="text-sm text-slate-400"></p>
+      <a
+        href="index.html"
+        class="bg-indigo-600 hover:bg-indigo-500 font-semibold px-4 py-2 rounded-lg transition-colors shadow-md"
+      >
+        Add note
+      </a>
+    </div>
+
+    <p id="status-message" class="text-center text-slate-400 py-8">Loading notes...</p>
+    <section id="notes-container" class="space-y-4" aria-live="polite"></section>
+  </main>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-app.js";
+    import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-auth.js";
+    import {
+      getFirestore,
+      collection,
+      onSnapshot,
+      query
+    } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyCBPbwkE7YkvvgvkMYWjjnUhZnJRnUSgg0",
+      authDomain: "hazarisnotes.firebaseapp.com",
+      projectId: "hazarisnotes",
+      storageBucket: "hazarisnotes.firebasestorage.app",
+      messagingSenderId: "422718641305",
+      appId: "1:422718641305:web:029b85370493baafe8d408",
+      measurementId: "G-GBRHXX2C2D"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+    const notesCollection = collection(db, "notes");
+    const notesContainer = document.getElementById("notes-container");
+    const noteCount = document.getElementById("note-count");
+    const statusMessage = document.getElementById("status-message");
+
+    function showError(message) {
+      statusMessage.textContent = message;
+      statusMessage.className = "text-center text-rose-400 py-8";
+    }
+
+    function formatTimestamp(timestamp) {
+      if (!timestamp) return "Pending timestamp";
+      return timestamp.toDate().toLocaleString();
+    }
+
+    function escapeHTML(value) {
+      return value.replace(/[&<>'"]/g, (tag) => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        "'": "&#39;",
+        '"': "&quot;"
+      }[tag] || tag));
+    }
+
+    try {
+      await signInAnonymously(auth);
+      const currentUser = auth.currentUser;
+      const notesQuery = query(notesCollection);
+
+      onSnapshot(notesQuery, (snapshot) => {
+        const noteSnapshots = snapshot.docs.sort((first, second) => {
+          const firstTime = first.data().createdAt?.toMillis() || 0;
+          const secondTime = second.data().createdAt?.toMillis() || 0;
+          return firstTime - secondTime;
+        });
+
+        notesContainer.innerHTML = "";
+        noteCount.textContent = `${noteSnapshots.length} ${noteSnapshots.length === 1 ? "note" : "notes"}`;
+
+        if (noteSnapshots.length === 0) {
+          statusMessage.textContent = "No notes yet. Add your first note!";
+          statusMessage.className = "text-center text-slate-500 py-8";
+          return;
+        }
+
+        statusMessage.textContent = "";
+        statusMessage.className = "hidden";
+
+        noteSnapshots.forEach((noteSnapshot) => {
+          const note = noteSnapshot.data();
+          const noteCard = document.createElement("article");
+          noteCard.className = "bg-slate-800 p-5 rounded-xl border border-slate-700 shadow-lg";
+          noteCard.innerHTML = `
+            <div class="flex flex-col gap-2">
+              <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
+                <h2 class="text-xl font-bold text-slate-100">${escapeHTML(note.title || "Untitled note")}</h2>
+                <time class="text-xs text-slate-500 sm:text-right">${escapeHTML(formatTimestamp(note.createdAt))}</time>
+              </div>
+              <p class="text-slate-300 whitespace-pre-wrap leading-relaxed text-sm">${escapeHTML(note.content || "")}</p>
+            </div>
+          `;
+          notesContainer.appendChild(noteCard);
+        });
+      }, (error) => {
+        console.error("Error loading notes: ", error);
+        showError(`Could not load notes: ${error.code === "permission-denied" ? "Firestore permissions do not allow reads." : error.message}`);
+      });
+    } catch (error) {
+      console.error("Error signing in: ", error);
+      showError(`Could not sign in: ${error.code === "auth/operation-not-allowed" || error.code === "auth/admin-restricted-operation" ? "Enable Anonymous sign-in in Firebase Authentication." : error.message}`);
+    }
+  </script>
+</body>
+</html>
