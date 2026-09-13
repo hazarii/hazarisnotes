@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Vibe Notes</title>
+  <!-- Tailwind CSS CDN for instant clean styling -->
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen p-6 font-sans">
+
+  <div class="max-w-3xl mx-auto space-y-8">
+    
+    <!-- Header -->
+    <header class="text-center">
+      <h1 class="text-4xl font-extrabold tracking-tight text-indigo-400">⚡ Vibe Notes</h1>
+      <p class="text-slate-400 mt-1">Lightweight, real-time notes powered by Firebase</p>
+    </header>
+
+    <!-- Create Note Form -->
+    <form id="note-form" class="bg-slate-800 p-6 rounded-xl border border-slate-700 shadow-xl space-y-4">
+      <div>
+        <input 
+          type="text" 
+          id="title" 
+          placeholder="Note title..." 
+          required 
+          class="w-full bg-slate-900 text-slate-100 placeholder-slate-500 rounded-lg p-3 border border-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        />
+      </div>
+      <div>
+        <textarea 
+          id="content" 
+          placeholder="Write your note here..." 
+          rows="3" 
+          required 
+          class="w-full bg-slate-900 text-slate-100 placeholder-slate-500 rounded-lg p-3 border border-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        ></textarea>
+      </div>
+      <button 
+        type="submit" 
+        class="w-full bg-indigo-600 hover:bg-indigo-500 font-semibold py-3 rounded-lg transition-all shadow-md active:scale-[0.99]"
+      >
+        Add Note
+      </button>
+    </form>
+
+    <!-- Notes List Grid -->
+    <div id="notes-container" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <!-- Dynamic notes will be inserted here -->
+    </div>
+
+  </div>
+
+  <!-- Firebase SDK (Modular v10+) -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-app.js";
+    import { 
+      getFirestore, 
+      collection, 
+      addDoc, 
+      onSnapshot, 
+      deleteDoc, 
+      doc, 
+      query, 
+      orderBy,
+      serverTimestamp 
+    } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-firestore.js";
+
+    // 1. Replace with your actual Firebase project configuration
+    const firebaseConfig = {
+      apiKey: "AIzaSyCBPbwkE7YkvvgvkMYWjjnUhZnJRnUSgg0",
+      authDomain: "hazarisnotes.firebaseapp.com",
+      projectId: "hazarisnotes",
+      storageBucket: "hazarisnotes.firebasestorage.app",
+      messagingSenderId: "422718641305",
+      appId: "1:422718641305:web:029b85370493baafe8d408",
+      measurementId: "G-GBRHXX2C2D"
+    };
+
+    // 2. Initialize Firebase & Firestore
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+    const notesCollection = collection(db, "notes");
+
+    // DOM Elements
+    const noteForm = document.getElementById("note-form");
+    const titleInput = document.getElementById("title");
+    const contentInput = document.getElementById("content");
+    const notesContainer = document.getElementById("notes-container");
+
+    // 3. Create Note
+    noteForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const title = titleInput.value.trim();
+      const content = contentInput.value.trim();
+
+      if (!title || !content) return;
+
+      try {
+        await addDoc(notesCollection, {
+          title: title,
+          content: content,
+          createdAt: serverTimestamp()
+        });
+        
+        // Clear inputs
+        titleInput.value = "";
+        contentInput.value = "";
+      } catch (err) {
+        console.error("Error adding note: ", err);
+      }
+    });
+
+    // 4. Real-time Listener (Read Notes)
+    const q = query(notesCollection, orderBy("createdAt", "desc"));
+    
+    onSnapshot(q, (snapshot) => {
+      notesContainer.innerHTML = ""; // Clear existing notes render
+
+      if (snapshot.empty) {
+        notesContainer.innerHTML = `
+          <div class="col-span-full text-center text-slate-500 py-8">
+            No notes yet. Add your first note above!
+          </div>
+        `;
+        return;
+      }
+
+      snapshot.forEach((docSnapshot) => {
+        const data = docSnapshot.data();
+        const id = docSnapshot.id;
+
+        const noteCard = document.createElement("div");
+        noteCard.className = "bg-slate-800 p-5 rounded-xl border border-slate-700 flex flex-col justify-between space-y-4 shadow-lg";
+        noteCard.innerHTML = `
+          <div>
+            <h3 class="text-xl font-bold text-slate-100">${escapeHTML(data.title)}</h3>
+            <p class="text-slate-300 mt-2 whitespace-pre-wrap leading-relaxed text-sm">${escapeHTML(data.content)}</p>
+          </div>
+          <div class="flex justify-end pt-2 border-t border-slate-700/50">
+            <button 
+              data-id="${id}" 
+              class="delete-btn text-xs font-medium text-rose-400 hover:text-rose-300 transition-colors bg-rose-950/40 hover:bg-rose-900/40 px-3 py-1.5 rounded-md border border-rose-800/40"
+            >
+              Delete
+            </button>
+          </div>
+        `;
+
+        notesContainer.appendChild(noteCard);
+      });
+
+      // Attach delete handlers
+      document.querySelectorAll(".delete-btn").forEach((btn) => {
+        btn.addEventListener("click", async (e) => {
+          const noteId = e.target.getAttribute("data-id");
+          await deleteDoc(doc(db, "notes", noteId));
+        });
+      });
+    });
+
+    // Helper function to prevent XSS attacks
+    function escapeHTML(str) {
+      return str.replace(/[&<>'"]/g, 
+        tag => ({
+          '&': '&amp;',
+          '<': '&lt;',
+          '>': '&gt;',
+          "'": '&#39;',
+          '"': '&quot;'
+        }[tag] || tag)
+      );
+    }
+  </script>
+</body>
+</html>
