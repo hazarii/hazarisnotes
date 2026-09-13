@@ -12,6 +12,13 @@
       <p class="text-indigo-400 font-semibold mb-2">hazarisNotes</p>
       <h1 class="text-4xl font-extrabold tracking-tight text-indigo-400">All Notes</h1>
       <p class="text-slate-400 mt-1">Your notes from oldest to newest</p>
+      <div class="mt-4 flex justify-center items-center gap-3">
+        <button id="sign-in-button" type="button" class="bg-indigo-600 hover:bg-indigo-500 font-semibold px-4 py-2 rounded-lg transition-colors shadow-md">
+          Sign in with Google
+        </button>
+        <span id="user-label" class="hidden text-sm text-slate-400"></span>
+        <button id="sign-out-button" type="button" class="hidden text-sm text-indigo-400 hover:text-indigo-300">Sign out</button>
+      </div>
     </header>
 
     <div class="flex justify-between items-center gap-4">
@@ -24,13 +31,13 @@
       </a>
     </div>
 
-    <p id="status-message" class="text-center text-slate-400 py-8">Loading notes...</p>
+    <p id="status-message" class="text-center text-slate-400 py-8">Sign in with Google to view shared notes.</p>
     <section id="notes-container" class="space-y-4" aria-live="polite"></section>
   </main>
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-app.js";
-    import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-auth.js";
+    import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-auth.js";
     import {
       getFirestore,
       collection,
@@ -55,6 +62,11 @@
     const notesContainer = document.getElementById("notes-container");
     const noteCount = document.getElementById("note-count");
     const statusMessage = document.getElementById("status-message");
+    const signInButton = document.getElementById("sign-in-button");
+    const signOutButton = document.getElementById("sign-out-button");
+    const userLabel = document.getElementById("user-label");
+    const googleProvider = new GoogleAuthProvider();
+    let notesStarted = false;
 
     function showError(message) {
       statusMessage.textContent = message;
@@ -76,9 +88,24 @@
       }[tag] || tag));
     }
 
-    try {
-      await signInAnonymously(auth);
-      const currentUser = auth.currentUser;
+    signInButton.addEventListener("click", async () => {
+      try {
+        await signInWithPopup(auth, googleProvider);
+      } catch (error) {
+        console.error("Error signing in with Google: ", error);
+        showError(`Could not sign in with Google: ${error.code === "auth/unauthorized-domain" ? "Open this site through http://localhost:8000 or add your deployed domain in Firebase Authorized domains." : error.message}`);
+      }
+    });
+
+    signOutButton.addEventListener("click", () => signOut(auth));
+
+    function startNotes(currentUser) {
+      if (notesStarted) return;
+      notesStarted = true;
+      signInButton.classList.add("hidden");
+      signOutButton.classList.remove("hidden");
+      userLabel.textContent = currentUser.displayName || currentUser.email || "Signed in";
+      userLabel.classList.remove("hidden");
       const notesQuery = query(notesCollection);
 
       onSnapshot(notesQuery, (snapshot) => {
@@ -111,6 +138,11 @@
                 <time class="text-xs text-slate-500 sm:text-right">${escapeHTML(formatTimestamp(note.createdAt))}</time>
               </div>
               <p class="text-slate-300 whitespace-pre-wrap leading-relaxed text-sm">${escapeHTML(note.content || "")}</p>
+              ${note.ownerId === currentUser.uid ? `
+                <div class="flex justify-end pt-2 border-t border-slate-700/50">
+                  <a href="edit.html?id=${encodeURIComponent(noteSnapshot.id)}" class="text-xs font-medium text-indigo-400 hover:text-indigo-300 transition-colors bg-indigo-950/40 hover:bg-indigo-900/40 px-3 py-1.5 rounded-md border border-indigo-800/40">Edit</a>
+                </div>
+              ` : ""}
             </div>
           `;
           notesContainer.appendChild(noteCard);
@@ -119,10 +151,11 @@
         console.error("Error loading notes: ", error);
         showError(`Could not load notes: ${error.code === "permission-denied" ? "Firestore permissions do not allow reads." : error.message}`);
       });
-    } catch (error) {
-      console.error("Error signing in: ", error);
-      showError(`Could not sign in: ${error.code === "auth/operation-not-allowed" || error.code === "auth/admin-restricted-operation" ? "Enable Anonymous sign-in in Firebase Authentication." : error.message}`);
     }
+
+    onAuthStateChanged(auth, (user) => {
+      if (user && !user.isAnonymous) startNotes(user);
+    });
   </script>
 </body>
 </html>

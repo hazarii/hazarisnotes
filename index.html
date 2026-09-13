@@ -15,6 +15,13 @@
     <header class="text-center">
       <h1 class="text-4xl font-extrabold tracking-tight text-indigo-400">⚡ Hazari's Notes</h1>
       <p class="text-slate-400 mt-1">Lightweight, real-time notes powered by Firebase</p>
+      <div class="mt-4 flex justify-center items-center gap-3">
+        <button id="sign-in-button" type="button" class="bg-indigo-600 hover:bg-indigo-500 font-semibold px-4 py-2 rounded-lg transition-colors shadow-md">
+          Sign in with Google
+        </button>
+        <span id="user-label" class="hidden text-sm text-slate-400"></span>
+        <button id="sign-out-button" type="button" class="hidden text-sm text-indigo-400 hover:text-indigo-300">Sign out</button>
+      </div>
     </header>
 
     <!-- Create Note Form -->
@@ -62,7 +69,7 @@
   <!-- Firebase SDK (Modular v10+) -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-app.js";
-    import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-auth.js";
+    import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-auth.js";
     import { 
       getFirestore, 
       collection, 
@@ -97,22 +104,39 @@
     const contentInput = document.getElementById("content");
     const notesContainer = document.getElementById("notes-container");
     const errorMessage = document.getElementById("error-message");
+    const signInButton = document.getElementById("sign-in-button");
+    const signOutButton = document.getElementById("sign-out-button");
+    const userLabel = document.getElementById("user-label");
+    const submitButton = noteForm.querySelector("button[type=submit]");
+    const googleProvider = new GoogleAuthProvider();
+    let currentUser;
+    let notesStarted = false;
 
     function showError(message) {
       errorMessage.textContent = message;
       errorMessage.classList.remove("hidden");
     }
 
-    // Authenticate before accessing notes so Firestore rules can verify ownership.
-    let currentUser;
-    try {
-      await signInAnonymously(auth);
-      currentUser = auth.currentUser;
-    } catch (err) {
-      console.error("Error signing in: ", err);
-      showError(`Could not sign in: ${err.code === "auth/operation-not-allowed" || err.code === "auth/admin-restricted-operation" ? "Enable Anonymous sign-in in Firebase Authentication." : err.message}`);
-      noteForm.querySelector("button[type=submit]").disabled = true;
-    }
+    signInButton.addEventListener("click", async () => {
+      try {
+        await signInWithPopup(auth, googleProvider);
+      } catch (err) {
+        console.error("Error signing in with Google: ", err);
+        showError(`Could not sign in with Google: ${err.code === "auth/unauthorized-domain" ? "Open this site through http://localhost:8000 or add your deployed domain in Firebase Authorized domains." : err.message}`);
+      }
+    });
+
+    signOutButton.addEventListener("click", () => signOut(auth));
+
+    function startNotes(user) {
+      if (notesStarted) return;
+      notesStarted = true;
+      currentUser = user;
+      signInButton.classList.add("hidden");
+      signOutButton.classList.remove("hidden");
+      userLabel.textContent = user.displayName || user.email || "Signed in";
+      userLabel.classList.remove("hidden");
+      submitButton.disabled = false;
 
     // 3. Create Note
     noteForm.addEventListener("submit", async (e) => {
@@ -145,8 +169,7 @@
     });
 
     // 4. Real-time Listener (Read Notes)
-    if (currentUser) {
-        const q = query(notesCollection);
+      const q = query(notesCollection);
 
       onSnapshot(q, (snapshot) => {
       notesContainer.innerHTML = ""; // Clear existing notes render
@@ -179,6 +202,12 @@
           </div>
           ${data.ownerId === currentUser.uid ? `
             <div class="flex justify-end pt-2 border-t border-slate-700/50">
+              <a
+                href="edit.html?id=${encodeURIComponent(id)}"
+                class="mr-2 text-xs font-medium text-indigo-400 hover:text-indigo-300 transition-colors bg-indigo-950/40 hover:bg-indigo-900/40 px-3 py-1.5 rounded-md border border-indigo-800/40"
+              >
+                Edit
+              </a>
               <button 
                 data-id="${id}" 
                 class="delete-btn text-xs font-medium text-rose-400 hover:text-rose-300 transition-colors bg-rose-950/40 hover:bg-rose-900/40 px-3 py-1.5 rounded-md border border-rose-800/40"
@@ -204,6 +233,11 @@
         showError(`Could not load notes: ${err.code === "permission-denied" ? "Firestore permissions do not allow reads." : err.message}`);
       });
     }
+
+    submitButton.disabled = true;
+    onAuthStateChanged(auth, (user) => {
+      if (user && !user.isAnonymous) startNotes(user);
+    });
 
     // Helper function to prevent XSS attacks
     function escapeHTML(str) {

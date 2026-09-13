@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Edit Note | hazarisNotes</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen p-6 font-sans">
+  <main class="max-w-3xl mx-auto space-y-8">
+    <header class="text-center">
+      <p class="text-indigo-400 font-semibold mb-2">hazarisNotes</p>
+      <h1 class="text-4xl font-extrabold tracking-tight text-indigo-400">Edit Note</h1>
+      <p class="text-slate-400 mt-1">Update your note and save the changes</p>
+      <div class="mt-4 flex justify-center items-center gap-3">
+        <button id="sign-in-button" type="button" class="bg-indigo-600 hover:bg-indigo-500 font-semibold px-4 py-2 rounded-lg transition-colors shadow-md">
+          Sign in with Google
+        </button>
+        <span id="user-label" class="hidden text-sm text-slate-400"></span>
+        <button id="sign-out-button" type="button" class="hidden text-sm text-indigo-400 hover:text-indigo-300">Sign out</button>
+      </div>
+    </header>
+
+    <form id="edit-form" class="bg-slate-800 p-6 rounded-xl border border-slate-700 shadow-xl space-y-4">
+      <input
+        type="text"
+        id="title"
+        placeholder="Note title..."
+        required
+        class="w-full bg-slate-900 text-slate-100 placeholder-slate-500 rounded-lg p-3 border border-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+      />
+      <textarea
+        id="content"
+        placeholder="Write your note here..."
+        rows="8"
+        required
+        class="w-full bg-slate-900 text-slate-100 placeholder-slate-500 rounded-lg p-3 border border-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+      ></textarea>
+      <div class="flex flex-col sm:flex-row gap-3">
+        <button
+          type="submit"
+          class="flex-1 bg-indigo-600 hover:bg-indigo-500 font-semibold py-3 rounded-lg transition-colors shadow-md"
+        >
+          Save changes
+        </button>
+        <a
+          href="notes.html"
+          class="flex-1 text-center bg-slate-700 hover:bg-slate-600 font-semibold py-3 rounded-lg transition-colors"
+        >
+          Cancel
+        </a>
+      </div>
+      <p id="status-message" class="hidden text-sm"></p>
+    </form>
+  </main>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-app.js";
+    import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-auth.js";
+    import {
+      getFirestore,
+      doc,
+      getDoc,
+      updateDoc,
+      serverTimestamp
+    } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyCBPbwkE7YkvvgvkMYWjjnUhZnJRnUSgg0",
+      authDomain: "hazarisnotes.firebaseapp.com",
+      projectId: "hazarisnotes",
+      storageBucket: "hazarisnotes.firebasestorage.app",
+      messagingSenderId: "422718641305",
+      appId: "1:422718641305:web:029b85370493baafe8d408",
+      measurementId: "G-GBRHXX2C2D"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+    const noteId = new URLSearchParams(window.location.search).get("id");
+    const editForm = document.getElementById("edit-form");
+    const titleInput = document.getElementById("title");
+    const contentInput = document.getElementById("content");
+    const statusMessage = document.getElementById("status-message");
+    const saveButton = editForm.querySelector("button[type=submit]");
+    const signInButton = document.getElementById("sign-in-button");
+    const signOutButton = document.getElementById("sign-out-button");
+    const userLabel = document.getElementById("user-label");
+    const googleProvider = new GoogleAuthProvider();
+
+    function showStatus(message, isError = true) {
+      statusMessage.textContent = message;
+      statusMessage.className = `text-sm ${isError ? "text-rose-400" : "text-emerald-400"}`;
+    }
+
+    saveButton.disabled = true;
+
+    signInButton.addEventListener("click", async () => {
+      try {
+        await signInWithPopup(auth, googleProvider);
+      } catch (error) {
+        console.error("Error signing in with Google: ", error);
+        showStatus(`Could not sign in with Google: ${error.code === "auth/unauthorized-domain" ? "Open this site through http://localhost:8000 or add your deployed domain in Firebase Authorized domains." : error.message}`);
+      }
+    });
+
+    signOutButton.addEventListener("click", () => signOut(auth));
+
+    async function loadNote(currentUser) {
+      if (!noteId) {
+        showStatus("No note was selected.");
+        return;
+      }
+
+      try {
+        signInButton.classList.add("hidden");
+        signOutButton.classList.remove("hidden");
+        userLabel.textContent = currentUser.displayName || currentUser.email || "Signed in";
+        userLabel.classList.remove("hidden");
+        const noteReference = doc(db, "notes", noteId);
+        const noteSnapshot = await getDoc(noteReference);
+
+        if (!noteSnapshot.exists()) {
+          showStatus("This note does not exist.");
+          saveButton.disabled = true;
+        } else if (noteSnapshot.data().ownerId !== currentUser.uid) {
+          showStatus("You can only edit notes that you created.");
+          saveButton.disabled = true;
+        } else {
+          titleInput.value = noteSnapshot.data().title || "";
+          contentInput.value = noteSnapshot.data().content || "";
+        }
+
+        editForm.addEventListener("submit", async (event) => {
+          event.preventDefault();
+          const title = titleInput.value.trim();
+          const content = contentInput.value.trim();
+
+          if (!title || !content) return;
+
+          try {
+            saveButton.disabled = true;
+            await updateDoc(noteReference, {
+              title,
+              content,
+              updatedAt: serverTimestamp()
+            });
+            showStatus("Note updated successfully.", false);
+            setTimeout(() => window.location.href = "notes.html", 700);
+          } catch (error) {
+            console.error("Error updating note: ", error);
+            showStatus(`Could not update note: ${error.code === "permission-denied" ? "You can only edit notes that you created." : error.message}`);
+            saveButton.disabled = false;
+          }
+        });
+      } catch (error) {
+        console.error("Error loading note: ", error);
+        showStatus(`Could not load note: ${error.code === "permission-denied" ? "Firestore permissions do not allow reading this note." : error.message}`);
+      }
+    }
+
+    onAuthStateChanged(auth, (user) => {
+      if (user && !user.isAnonymous) loadNote(user);
+    });
+  </script>
+</body>
+</html>
