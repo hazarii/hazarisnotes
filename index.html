@@ -56,6 +56,7 @@
   <!-- Firebase SDK (Modular v10+) -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-app.js";
+    import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-auth.js";
     import { 
       getFirestore, 
       collection, 
@@ -64,7 +65,7 @@
       deleteDoc, 
       doc, 
       query, 
-      orderBy,
+      where,
       serverTimestamp 
     } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-firestore.js";
 
@@ -81,6 +82,7 @@
 
     // 2. Initialize Firebase & Firestore
     const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
     const db = getFirestore(app);
     const notesCollection = collection(db, "notes");
 
@@ -96,6 +98,17 @@
       errorMessage.classList.remove("hidden");
     }
 
+    // Authenticate before accessing notes so Firestore rules can verify ownership.
+    let currentUser;
+    try {
+      await signInAnonymously(auth);
+      currentUser = auth.currentUser;
+    } catch (err) {
+      console.error("Error signing in: ", err);
+      showError(`Could not sign in: ${err.code === "auth/operation-not-allowed" || err.code === "auth/admin-restricted-operation" ? "Enable Anonymous sign-in in Firebase Authentication." : err.message}`);
+      noteForm.querySelector("button[type=submit]").disabled = true;
+    }
+
     // 3. Create Note
     noteForm.addEventListener("submit", async (e) => {
       e.preventDefault();
@@ -103,12 +116,17 @@
       const content = contentInput.value.trim();
 
       if (!title || !content) return;
+      if (!currentUser) {
+        showError("You must be signed in before adding notes.");
+        return;
+      }
 
       try {
         errorMessage.classList.add("hidden");
         await addDoc(notesCollection, {
           title: title,
           content: content,
+          ownerId: currentUser.uid,
           createdAt: serverTimestamp()
         });
         
@@ -122,9 +140,10 @@
     });
 
     // 4. Real-time Listener (Read Notes)
-    const q = query(notesCollection, orderBy("createdAt", "desc"));
-    
-    onSnapshot(q, (snapshot) => {
+    if (currentUser) {
+      const q = query(notesCollection, where("ownerId", "==", currentUser.uid));
+
+      onSnapshot(q, (snapshot) => {
       notesContainer.innerHTML = ""; // Clear existing notes render
 
       if (snapshot.empty) {
@@ -136,7 +155,13 @@
         return;
       }
 
-      snapshot.forEach((docSnapshot) => {
+      const noteSnapshots = snapshot.docs.sort((first, second) => {
+        const firstTime = first.data().createdAt?.toMillis() || 0;
+        const secondTime = second.data().createdAt?.toMillis() || 0;
+        return secondTime - firstTime;
+      });
+
+      noteSnapshots.forEach((docSnapshot) => {
         const data = docSnapshot.data();
         const id = docSnapshot.id;
 
@@ -167,10 +192,11 @@
           await deleteDoc(doc(db, "notes", noteId));
         });
       });
-    }, (err) => {
-      console.error("Error loading notes: ", err);
-      showError(`Could not load notes: ${err.code === "permission-denied" ? "Firestore permissions do not allow reads." : err.message}`);
-    });
+      }, (err) => {
+        console.error("Error loading notes: ", err);
+        showError(`Could not load notes: ${err.code === "permission-denied" ? "Firestore permissions do not allow reads." : err.message}`);
+      });
+    }
 
     // Helper function to prevent XSS attacks
     function escapeHTML(str) {
